@@ -1,0 +1,289 @@
+<canvas id="canvas" style="border: 1px solid black"></canvas>
+<div>
+    Cycle: <span id="cycle"></span>
+    <button id="pause">Play/Pause</button>
+    <button id="next">&gt;&gt; Next</button>
+</div>
+<script>
+// constants
+var STEP=24;
+var FPS=30;
+var HALF_STEP=STEP/2;
+var WIDTH=25;
+var HEIGHT=25;
+var PILLS_COUNT = 50;
+
+var DIRECTIONS = [
+    { dx: 1, dy: 0}, // right
+    //{ dx: 1, dy: 1}, // right-down
+    { dx: 0, dy: 1}, // down
+    //{ dx: -1, dy: 1}, // down-left
+    { dx: -1, dy: 0}, // left    
+    //{ dx: -1, dy: -1}, // left-up    
+    { dx: 0, dy: -1}, // up    
+    //{ dx: 1, dy: -1}, // up-right    
+];
+
+var SOUNDS = {
+    beep : new Audio("beep.wav"),  
+    hit: new Audio("hit.wav"),
+    jump: new Audio("jump.wav"),
+    collect: new Audio("collect.wav")    
+}
+
+var ENEMIES = [
+    { id: 1, x: 1, y: 1, speed: 1, direction: 0, color: "#F00" }, //red    
+    { id: 2, x: 23, y: 1, speed: 1, direction: 1, color: "#0F0" }, //green   
+    { id: 3, x: 23, y: 23, speed: 1, direction: 2, color: "#00F" }, //blue
+    { id: 4, x: 1, y: 23, speed: 1, direction: 3, color: "#F0F" }, //pink    
+    { id: 5, x: 13, y: 13, speed: 1, direction: 0, color: "#FF0" }, //yellow
+    { id: 6, x: 12, y: 12, speed: 1, direction: 1, color: "#0FF" }, //ciano    
+];
+
+var OBSTACLES = [
+    "1111111111111111111111111",
+    "1000000000000000000000001",
+    "1001100000001000000011001",
+    "1001100000001000000011001",
+    "1000000000001000000000001",
+    "1000000000001000000000001",
+    "1000000000001000000000001",
+    "1000000110001000110000001",
+    "1000000110001000110000001",
+    "1000000000001000000000001",
+    "1000000000000000000000001",
+    "1000000000000000000000001",
+    "1001111111000001111111001",
+    "1000000000000000000000001",
+    "1000000000000000000000001",
+    "1000000000001000000000001",
+    "1000000110001000110000001",
+    "1000000110001000110000001",
+    "1000000000001000000000001",
+    "1000000000001000000000001",
+    "1000000000001000000000001",
+    "1001100000001000000011001",
+    "1001100000001000000011001",
+    "1000000000000000000000001",
+    "1111111111111111111111111"
+];
+
+
+//global attributes
+var cycle=0;
+var pills = [];
+var gameInterval = undefined;
+
+window.onload = function(){
+
+    var canvas = document.getElementById("canvas");
+    canvas.height = HEIGHT * STEP;
+    canvas.width = WIDTH * STEP;
+    var ctx = canvas.getContext("2d");    
+
+    document.getElementById("pause").onclick = function(){
+        if(gameInterval){
+            clearInterval(gameInterval);
+            gameInterval = undefined;
+
+        }else{
+            gameInterval = setInterval(game, 1000/FPS, ctx);     
+        }
+    };
+
+    document.getElementById("next").onclick = function(){
+        game(ctx);
+    };
+
+    for(var i=0; i<PILLS_COUNT; i++){
+        pills.push(generateCoordinateOnEmptySpace());        
+    }
+
+    clearCanvas(ctx);
+
+    ENEMIES.forEach(function(enemy){
+        drawEnemy(enemy, ctx);
+    });
+
+    gameInterval = setInterval(game, 1000/FPS, ctx);     
+}
+
+
+function generateCoordinateOnEmptySpace(){
+    var x=y=0;
+    do{
+        x = Math.floor(Math.random() * WIDTH);
+        y = Math.floor(Math.random() * HEIGHT);
+    }while(checkObstacle(x,y) || checkPill(x,y));
+    return {x:x, y:y};
+}
+
+function clearCanvas(ctx){
+    drawBackground(ctx);
+    drawGrid(ctx)
+    drawOBSTACLES(ctx);  
+    drawPills(ctx);
+}
+
+function drawBackground(ctx){
+    ctx.fillStyle = "black"
+    ctx.fillRect(0,0,WIDTH*STEP,HEIGHT*STEP);
+}
+
+function drawPills(ctx){
+    pills.forEach(function(p){        
+        drawPill(p,ctx);
+    });
+}
+
+function drawPill(p, ctx){
+    if(p){        
+        ctx.fillStyle = "black"
+        var value = (Math.sin(cycle * Math.PI * 2 / FPS) / 2 + 0.5) * 0xFF | 0;        
+        var grayscale = (value << 16) | (value << 8) | value;
+        var color = '#' + grayscale.toString(16);
+
+        ctx.fillStyle = color;    
+        ctx.beginPath();
+        ctx.arc(p.x*STEP+HALF_STEP, p.y*STEP+HALF_STEP, HALF_STEP*0.8, 0, 2*Math.PI);
+        ctx.arc(p.x*STEP+HALF_STEP, p.y*STEP+HALF_STEP, HALF_STEP*0.8, 0, 2*Math.PI);
+        ctx.fill();
+    }
+}
+
+function drawGrid(ctx){
+    ctx.strokeStyle = "green";
+    ctx.lineWIDTH = 1;
+    for(var i=0; i<WIDTH; i++){        
+        ctx.beginPath();
+        ctx.moveTo(i*STEP,0);
+        ctx.lineTo(i*STEP,HEIGHT*STEP);            
+        ctx.stroke();
+    }
+    for(var j=0; j<HEIGHT; j++){
+        ctx.beginPath();
+        ctx.moveTo(0, j*STEP);
+        ctx.lineTo(WIDTH*STEP, j*STEP);            
+        ctx.stroke();
+    }
+}
+
+function drawOBSTACLES(ctx){
+    for(var y=0; y<HEIGHT; y++){
+        for(var x=0; x<WIDTH; x++){            
+            if(checkObstacle(x,y)){
+                ctx.fillStyle = "green";
+                ctx.fillRect(x*STEP,y*STEP,STEP,STEP);
+            }
+        }
+    }
+}
+
+function checkColision(enemy, x, y){    
+    return checkObstacle(x, y) || checkENEMIES(enemy, x, y);        
+}
+
+function checkPill(x,y){
+    for(var i=0; i<PILLS_COUNT; i++){
+        if(pills[i] && pills[i].x == x && pills[i].y == y){
+            pills[i] = undefined;
+            return true;
+        }
+    }
+    return false;
+}
+
+function checkObstacle(x, y){
+    return OBSTACLES[y] && OBSTACLES[y].charAt(x) == '1';
+}
+
+function checkENEMIES(enemy, x, y){
+    for(var i=0; i<ENEMIES.length; i++){
+        var other = ENEMIES[i];
+        if(enemy.id != other.id &&
+            other.x == x && other.y == y){
+            return true;
+        }
+    }
+}
+
+function game(ctx){                
+    clearCanvas(ctx);
+    moveEnemies(ctx);    
+    doCycle();
+}
+
+function doCycle(){
+    cycle = ++cycle % Number.MAX_VALUE; 
+    document.getElementById("cycle").innerText = ""+ cycle;  
+}
+
+function moveEnemies(ctx){
+    ENEMIES.forEach(function(enemy){
+        if(cycle % ((10-enemy.speed+1)*2) == 0){            
+            randomWalk(enemy);
+            if(checkPill(enemy.x, enemy.y)){
+                SOUNDS.collect.play();
+                enemy.speed = enemy.speed < 10 ? enemy.speed+1 : 10;                
+            }
+        }
+        drawEnemy(enemy, ctx);
+    });
+}
+
+function randomWalk(enemy){
+
+    var r = Math.random();
+
+    if(r < 0.10){
+        nextDirection(enemy);
+    }
+
+    var destX = enemy.x + DIRECTIONS[enemy.direction].dx;
+    var destY = enemy.y + DIRECTIONS[enemy.direction].dy;
+
+    var count=0;
+    while(checkColision(enemy, destX, destY) && count < 4){                
+        if(r < 0.5){
+            nextDirection(enemy);        
+        }else{
+            previousDirection(enemy);
+        }
+        destX = enemy.x + DIRECTIONS[enemy.direction].dx;
+        destY = enemy.y + DIRECTIONS[enemy.direction].dy;
+        count++;
+    }
+
+    enemy.x = destX;
+    enemy.y = destY;
+}
+
+function nextDirection(enemy){
+    enemy.direction = (enemy.direction + 1) % DIRECTIONS.length;    
+}
+
+function previousDirection(enemy){
+    enemy.direction = (enemy.direction + 1) % DIRECTIONS.length;    
+}
+
+function drawEnemy(enemy, ctx){
+    ctx.fillStyle = enemy.color;    
+    ctx.beginPath();
+    ctx.arc(enemy.x*STEP+HALF_STEP, enemy.y*STEP+HALF_STEP, STEP/2, Math.PI, 0);
+    ctx.fill();
+    ctx.fillRect(enemy.x*STEP, enemy.y*STEP+HALF_STEP, STEP, HALF_STEP);    
+    
+    ctx.fillStyle = "white";    
+    ctx.beginPath();
+    ctx.arc(enemy.x*STEP+0.70*STEP, enemy.y*STEP+HALF_STEP, STEP/4, 0, 2*Math.PI);
+    ctx.arc(enemy.x*STEP+0.30*STEP, enemy.y*STEP+HALF_STEP, STEP/4, 0, 2*Math.PI);
+    ctx.fill();
+
+    ctx.fillStyle = "black";    
+    ctx.beginPath();
+    ctx.arc(enemy.x*STEP+0.70*STEP *(1.0 + DIRECTIONS[enemy.direction].dx/5), enemy.y*STEP+HALF_STEP*(1.0 + DIRECTIONS[enemy.direction].dy/5), STEP/10, 0, 2*Math.PI);
+    ctx.arc(enemy.x*STEP+0.30*STEP *(1.0 + DIRECTIONS[enemy.direction].dx/5), enemy.y*STEP+HALF_STEP*(1.0 + DIRECTIONS[enemy.direction].dy/5), STEP/10, 0, 2*Math.PI);
+    ctx.fill();    
+
+}
+</script>

@@ -11,7 +11,7 @@ var FPS=30;
 var HALF_STEP=STEP/2;
 var WIDTH=25;
 var HEIGHT=25;
-var PILLS_COUNT = 50;
+var PILLS_COUNT = 300;
 
 var DIRECTIONS = [
     { dx: 1, dy: 0}, // right
@@ -235,8 +235,10 @@ function randomWalk(enemy){
 
     var r = Math.random();
 
-    if(r < 0.10){
-        nextDirection(enemy);
+    if(r < 0.05){
+        nextDirection(enemy);        
+    }else if(r < 0.1){
+        previousDirection(enemy);
     }
 
     var destX = enemy.x + DIRECTIONS[enemy.direction].dx;

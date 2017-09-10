@@ -1,0 +1,496 @@
+<canvas id="canvas" style="border: 1px solid black"></canvas>
+<div>
+    Cycle: <span id="cycle"></span>
+    <button id="pause">Play/Pause</button>
+    <button id="next">&gt;&gt; Next</button>
+    </br>
+    By Rafael Odon (odon.rafael@gmail.com)
+</div>
+<script>
+// constants
+var STEP=20;
+var FPS=30;
+var HALF_STEP=STEP/2;
+var WIDTH=25;
+var HEIGHT=26;
+var PILLS_COUNT = 200;
+
+var RIGHT = 0;
+var DOWN = 1;
+var LEFT = 2;
+var UP = 3;
+
+var SCENE_PRESS_SPACE = 1;
+var SCENE_GAME = 2;
+var SCENE_GAME_OVER = 3;
+
+var MOVING = 1;
+var HIT = 2;
+var DEAD = 3;
+
+var DIRECTIONS = [
+    { dx: 1, dy: 0}, // right    
+    { dx: 0, dy: 1}, // down    
+    { dx: -1, dy: 0}, // left        
+    { dx: 0, dy: -1}, // up    
+];
+
+var SOUNDS = {
+    beep : new Audio("beep.wav"),  
+    hit: new Audio("hit.wav"),
+    jump: new Audio("jump.wav"),
+    collect: new Audio("collect.wav")    
+}
+
+var OBSTACLES = [    
+    "#########################",
+    "#########################",
+    "#.......................#",
+    "#.......................#",
+    "#..###..#########..###..#",    
+    "#.......................#",    
+    "#.......................#",
+    "#..########...########..#",    
+    "#.......................#",    
+    "#.......................#",
+    "#..###..####.####..###..#",    
+    "#.......#.......#.......#",
+    "#..#....#.......#....#..#",
+    "#..#.................#..#",    
+    "#..#....#.......#....#..#",
+    "#.......#.......#.......#",
+    "#..###..####.####..###..#",    
+    "#.......................#",    
+    "#.......................#",
+    "#..########...########..#",    
+    "#.......................#",
+    "#.......................#",    
+    "#..###..#########..###..#",    
+    "#.......................#",    
+    "#.......................#",
+    "#########################"
+];
+
+//global attributes
+
+var enemies = [
+    { id: 1, gx: 1, gy: 2, speed: 2, direction: 0, color: "#F00" }, //red    
+    { id: 2, gx: 23, gy: 2, speed: 2, direction: 1, color: "#0F0" }, //green   
+    { id: 3, gx: 23, gy: 23, speed: 2, direction: 2, color: "#00F" }, //blue
+    { id: 4, gx: 1, gy: 23, speed: 2, direction: 3, color: "#F0F" }, //pink    
+    { id: 5, gx: 1, gy: 12, speed: 2, direction: 0, color: "#FF0" }, //yellow
+    { id: 6, gx: 23, gy: 12, speed: 2, direction: 1, color: "#0FF" }, //ciano    
+];
+
+var player = { x: 0, y: 0, speed: 4, direction: 0, color: "#FF0", lifes: 3, stucked: false, state: MOVING };
+
+var cycle=0;
+var pills = [];
+var gameInterval = undefined;
+var lastKeyDirection = 0;
+var playing = true;
+var scene = SCENE_PRESS_SPACE;
+
+window.onload = function(){
+
+    var canvas = document.getElementById("canvas");
+    canvas.height = HEIGHT * STEP;
+    canvas.width = WIDTH * STEP;
+    var ctx = canvas.getContext("2d");    
+
+    document.getElementById("pause").onclick = function(){
+        togglePausePlay(ctx);
+    };
+
+    document.getElementById("next").onclick = function(){
+        game(ctx);
+    };
+
+    document.onkeydown = keyDown;
+
+    for(var i=0; i<PILLS_COUNT; i++){
+        pills.push(generateCoordinateOnEmptySpace());        
+    }
+
+    clearCanvas(ctx);
+
+    enemies.forEach(function(enemy){
+        enemy.x = enemy.gx * STEP + HALF_STEP;
+        enemy.y = enemy.gy * STEP + HALF_STEP;
+        drawEnemy(enemy, ctx);
+    });
+
+    player.x = canvas.width/2;
+    player.y = canvas.height/2 + HALF_STEP;
+    drawPlayer(player, ctx);
+
+    gameInterval = setInterval(game, 1000/FPS, ctx);     
+}
+
+function game(ctx){  
+
+    if(scene == SCENE_PRESS_SPACE){
+        clearCanvas(ctx);         
+        displayDarkOverlay(ctx);   
+        displayText(ctx, "PRESS SPACE TO CONTINUE");        
+        displayLifeCount(ctx);
+    }else if(scene == SCENE_GAME){
+        clearCanvas(ctx);    
+        moveAndDrawEnemies(ctx);         
+        moveAndDrawPlayer(ctx);        
+    }else if(scene == SCENE_GAME_OVER){
+        clearCanvas(ctx);   
+        displayDarkOverlay(ctx);
+        displayLifeCount(ctx); 
+        displayText(ctx, "GAME OVER! PRESS F5");
+    }    
+
+    doCycle();
+}
+
+function togglePausePlay(ctx){  
+    if(gameInterval){
+        clearInterval(gameInterval);
+        gameInterval = undefined;
+
+    }else{
+        gameInterval = setInterval(game, 1000/FPS, ctx);     
+    }    
+}
+
+function keyDown(e) {
+
+    e = e || window.event;
+
+    if (e.keyCode == '38') { //up
+        lastKeyDirection = UP;
+    } else if (e.keyCode == '40') { //down
+        lastKeyDirection = DOWN;
+    } else if (e.keyCode == '37') { //left
+        lastKeyDirection = LEFT;
+    } else if (e.keyCode == '39') { //right
+        lastKeyDirection = RIGHT;
+    } else if (e.keyCode = '32') {
+        if(scene == SCENE_PRESS_SPACE){
+            scene = SCENE_GAME;
+            playing = true;
+            player.x = canvas.width/2;
+            player.y = canvas.height/2 + HALF_STEP;
+            player.state = MOVING;
+        }
+    }
+}
+
+
+function generateCoordinateOnEmptySpace(){
+    var x=y=0;
+    do{
+        x = Math.floor(Math.random() * WIDTH);
+        y = Math.floor(Math.random() * HEIGHT);
+    }while(checkObstacle(x,y) || checkPill(x,y) || checkPlayer(x,y));
+    return {x:x, y:y};
+}
+
+function clearCanvas(ctx){
+    drawBackground(ctx);
+    drawGrid(ctx)
+    drawOBSTACLES(ctx);  
+    drawPills(ctx);
+}
+
+function drawBackground(ctx){
+    ctx.fillStyle = "black"
+    ctx.fillRect(0,0,WIDTH*STEP,HEIGHT*STEP);
+}
+
+function drawPills(ctx){
+    pills.forEach(function(p){        
+        drawPill(p,ctx);
+    });
+}
+
+function drawPill(p, ctx){
+    if(p){        
+        ctx.fillStyle = "black"
+        var value = (Math.sin(cycle * Math.PI * 2 / FPS) / 2 + 0.5) * 0xFF | 0;        
+        var grayscale = (value << 16) | (value << 8) | value;
+        var color = '#' + grayscale.toString(16);
+
+        ctx.fillStyle = color;    
+        ctx.beginPath();
+        ctx.arc(p.x*STEP+HALF_STEP, p.y*STEP+HALF_STEP, HALF_STEP*0.3, 0, 2*Math.PI);
+        ctx.arc(p.x*STEP+HALF_STEP, p.y*STEP+HALF_STEP, HALF_STEP*0.3, 0, 2*Math.PI);
+        ctx.fill();
+    }
+}
+
+function drawGrid(ctx){
+    ctx.strokeStyle = "green";
+    ctx.lineWIDTH = 1;
+    for(var i=0; i<WIDTH; i++){        
+        ctx.beginPath();
+        ctx.moveTo(i*STEP,0);
+        ctx.lineTo(i*STEP,HEIGHT*STEP);            
+        ctx.stroke();
+    }
+    for(var j=0; j<HEIGHT; j++){
+        ctx.beginPath();
+        ctx.moveTo(0, j*STEP);
+        ctx.lineTo(WIDTH*STEP, j*STEP);            
+        ctx.stroke();
+    }
+}
+
+function drawOBSTACLES(ctx){
+    for(var y=0; y<HEIGHT; y++){
+        for(var x=0; x<WIDTH; x++){            
+            if(checkObstacle(x,y)){
+                ctx.fillStyle = "green";
+                ctx.fillRect(x*STEP,y*STEP,STEP,STEP);
+            }
+        }
+    }
+}
+
+function checkPlayer(x,y){    
+    return player.x == x && player.y == y;
+}
+
+function checkPill(x,y){
+    for(var i=0; i<PILLS_COUNT; i++){
+        if(pills[i] && pills[i].x == x && pills[i].y == y){
+            pills[i] = undefined;
+            return true;
+        }
+    }
+    return false;
+}
+
+function checkObstacle(x, y){
+    return OBSTACLES[y] && OBSTACLES[y].charAt(x) == '#';
+}
+
+function checkEnemies(x, y, enemy){
+    for(var i=0; i<enemies.length; i++){
+        var other = enemies[i];        
+        if((enemy == undefined || enemy.id != other.id) &&
+            other.gx == x && other.gy == y){
+            return true;
+        }
+    }
+}
+
+function displayDarkOverlay(ctx){
+    ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function displayText(ctx, text){            
+    ctx.font = "30px sans-serif";  
+    var x = (canvas.width - ctx.measureText(text).width) / 2;
+    var y = (canvas.height) / 2;        
+    ctx.fillStyle = "#333";
+    ctx.fillText(text.toUpperCase(),x-2,y+2);    
+    ctx.fillStyle = "#FFF";
+    ctx.fillText(text.toUpperCase(),x,y);
+}
+
+function displayLifeCount(ctx, x, y, scale){
+    if(x == undefined){
+
+        ctx.fillStyle = "red";
+        ctx.font = "30px sans-serif";
+        var text = "LIFE x "+player.lifes;
+        var x = (canvas.width - ctx.measureText(text).width) / 2;
+        var y = (canvas.height) / 3;
+        ctx.fillText(text, x, y)
+    }
+}
+
+function doCycle(){
+    cycle = ++cycle % Number.MAX_VALUE; 
+    document.getElementById("cycle").innerText = ""+ cycle;  
+}
+
+function moveAndDrawPlayer(ctx){
+
+    if(player.state == MOVING){
+        if((player.x + HALF_STEP) % STEP == 0 && (player.y + HALF_STEP) % STEP == 0){            
+            player.direction = lastKeyDirection;
+        }
+
+        var destX = player.x + DIRECTIONS[player.direction].dx * player.speed;
+        var destY = player.y + DIRECTIONS[player.direction].dy * player.speed;
+
+        var gridX = parseInt((player.x + DIRECTIONS[player.direction].dx * (HALF_STEP + 0.5)) / STEP); 
+        var gridY = parseInt((player.y + DIRECTIONS[player.direction].dy * (HALF_STEP + 0.5)) / STEP);                        
+
+        if(!checkObstacle(gridX, gridY)){                           
+            player.x = destX;
+            player.y = destY;
+            player.stucked = false;                  
+        }else{
+            if(!player.stucked){
+                SOUNDS.hit.play();
+                player.stucked = true;
+            }
+        }     
+
+        if(checkEnemies(gridX, gridY)){
+            SOUNDS.hit.play();               
+            player.lifes -= player.lifes > 0 ? 1 : 0;            
+            player.state = HIT;
+            playing = false;            
+        }
+         
+        if(checkPill(gridX, gridY)){                        
+            SOUNDS.collect.currentTime = 0;
+            SOUNDS.collect.play();
+            //player.speed += player.speed >= 10 ? 0 : 1;
+        }
+    }
+
+    //bloco no grid para debug
+    //ctx.fillStyle = "red";
+    //ctx.fillRect(gridX * STEP, gridY * STEP, STEP, STEP);
+
+    if(player.state == DEAD){
+        if(player.lifes > 0){
+            scene = SCENE_PRESS_SPACE;        
+        }else{
+            scene = SCENE_GAME_OVER;        
+        }
+    }
+
+    if(player.state == HIT){
+        player.aberturaBoca += 0.1; 
+        if(player.aberturaBoca > 3){
+            player.state = DEAD;
+        }
+    }
+
+    drawPlayer(player, ctx);   
+}
+
+function moveAndDrawEnemies(ctx){
+    enemies.forEach(function(enemy){
+        if(playing){
+            randomWalk(enemy);        
+        }
+
+        /*
+        ctx.fillStyle = "lime";
+        ctx.fillRect(enemy.gx * STEP, enemy.gy * STEP, STEP, STEP);
+        */
+
+        drawEnemy(enemy, ctx);
+    });
+}
+
+function randomWalk(enemy){
+    
+    var r = Math.random();
+    
+    if((enemy.x - HALF_STEP) % STEP == 0 && (enemy.y - HALF_STEP) % STEP == 0){            
+        if(r < 0.05){
+            nextDirection(enemy);        
+        }else if(r < 0.1){
+            previousDirection(enemy);
+        }
+    }
+
+    var destX = enemy.x + DIRECTIONS[enemy.direction].dx * enemy.speed;
+    var destY = enemy.y + DIRECTIONS[enemy.direction].dy * enemy.speed;
+
+    var gridX = parseInt((enemy.x + DIRECTIONS[enemy.direction].dx * (HALF_STEP + 0.5)) / STEP); 
+    var gridY = parseInt((enemy.y + DIRECTIONS[enemy.direction].dy * (HALF_STEP + 0.5)) / STEP);
+
+    if(!checkObstacle(gridX, gridY)){                           
+        enemy.x = destX;
+        enemy.y = destY; 
+
+        enemy.gx = gridX;
+        enemy.gy = gridY;       
+    }else{
+        if(r < 0.5){
+            nextDirection(enemy);
+        }else{
+            previousDirection(enemy);
+        }
+    }                                                   
+}
+
+function nextDirection(enemy){
+    enemy.direction = (enemy.direction + 1) % DIRECTIONS.length;    
+}
+
+function previousDirection(enemy){
+    enemy.direction = (enemy.direction + 1) % DIRECTIONS.length;    
+}
+
+function drawEnemy(enemy, ctx){    
+
+    ctx.fillStyle = "white";    
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y, HALF_STEP, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = enemy.color;    
+    ctx.beginPath();
+    ctx.arc(enemy.x, enemy.y, HALF_STEP, Math.PI, 0);
+    ctx.fill();
+   
+    ctx.fillRect(enemy.x - HALF_STEP , enemy.y, STEP, HALF_STEP);    
+  
+    ctx.fillStyle = "white";    
+    ctx.beginPath();
+    ctx.arc(enemy.x+0.70*STEP - HALF_STEP, enemy.y, STEP/4, 0, 2*Math.PI);
+    ctx.arc(enemy.x+0.30*STEP - HALF_STEP, enemy.y, STEP/4, 0, 2*Math.PI);
+    ctx.fill();
+
+    ctx.fillStyle = "black";    
+    ctx.beginPath();
+    ctx.arc(enemy.x+0.70*STEP + HALF_STEP*(1.0 + DIRECTIONS[enemy.direction].dx/5) - STEP, enemy.y+1*(1.0 + DIRECTIONS[enemy.direction].dy/5), STEP/10, 0, 2*Math.PI);
+    ctx.arc(enemy.x+0.30*STEP + HALF_STEP*(1.0 + DIRECTIONS[enemy.direction].dx/5) - STEP, enemy.y+1*(1.0 + DIRECTIONS[enemy.direction].dy/5), STEP/10, 0, 2*Math.PI);
+    ctx.fill();        
+}
+
+function drawPlayer(player, ctx){
+
+    ctx.fillStyle = player.color;    
+   
+    var inicioArco = 0;
+    var fimArco = 0;
+
+    if(player.direction == RIGHT){        
+        inicioArco = 1;
+        fimArco = 0;
+    }
+
+    if(player.direction == LEFT){
+        inicioArco = 0;
+        fimArco = 1;
+    }
+
+    if(player.direction == DOWN){
+        inicioArco = 1.5;
+        fimArco = 0.5;
+    }
+
+    if(player.direction == UP){
+        inicioArco = 0.5;
+        fimArco = 1.5;
+    }    
+
+    if(player.state == MOVING){
+        player.aberturaBoca = (Math.sin(cycle * Math.PI * 2 / FPS*2) / 2 + 0.5);        
+    }
+    
+    ctx.beginPath();    
+    ctx.arc(player.x, player.y, STEP/2, Math.PI * inicioArco, -player.aberturaBoca + Math.PI * fimArco);       
+    ctx.fill();
+    ctx.beginPath(); 
+    ctx.arc(player.x, player.y, STEP/2, Math.PI * inicioArco, +player.aberturaBoca + Math.PI * fimArco, true);
+    ctx.fill();
+}
+</script>

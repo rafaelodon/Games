@@ -13,7 +13,7 @@ var FPS=30;
 var HALF_STEP=STEP/2;
 var WIDTH=25;
 var HEIGHT=26;
-var PILLS_COUNT = 200;
+var PILLS_COUNT = 100;
 
 var RIGHT = 0;
 var DOWN = 1;
@@ -39,7 +39,9 @@ var SOUNDS = {
     beep : new Audio("beep.wav"),  
     hit: new Audio("hit.wav"),
     jump: new Audio("jump.wav"),
-    collect: new Audio("collect.wav")    
+    collect: new Audio("collect.wav"),
+    die: new Audio("die.wav"),
+    over: new Audio("over.wav"),
 }
 
 var OBSTACLES = [    
@@ -337,9 +339,9 @@ function moveAndDrawPlayer(ctx){
         }     
 
         if(checkEnemies(gridX, gridY)){
-            SOUNDS.hit.play();               
-            player.lifes -= player.lifes > 0 ? 1 : 0;            
             player.state = HIT;
+            SOUNDS.die.play();               
+            player.lifes -= player.lifes > 0 ? 1 : 0;            
             playing = false;            
         }
          
@@ -359,6 +361,7 @@ function moveAndDrawPlayer(ctx){
             scene = SCENE_PRESS_SPACE;        
         }else{
             scene = SCENE_GAME_OVER;        
+            SOUNDS.over.play();
         }
     }
 

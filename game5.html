@@ -136,6 +136,18 @@ function game(ctx){
         displayDarkOverlay(ctx);   
         displayText(ctx, "PRESS SPACE TO CONTINUE");        
         displayLifeCount(ctx);
+
+        var x = canvas.width / 2;
+        var y = canvas.height / 3 * 2;
+        
+        ctx.fillStyle = player.color;
+        ctx.beginPath();    
+        ctx.arc(x, y, STEP * 2, 0, Math.PI - 0.5);       
+        ctx.fill();
+        ctx.beginPath(); 
+        ctx.arc(x, y, STEP * 2, 0, Math.PI + 0.5, true);
+        ctx.fill();
+
     }else if(scene == SCENE_GAME){
         clearCanvas(ctx);    
         moveAndDrawEnemies(ctx);         
@@ -330,6 +342,10 @@ function moveAndDrawPlayer(ctx){
         if(!checkObstacle(gridX, gridY)){                           
             player.x = destX;
             player.y = destY;
+
+            player.gx = gridX;
+            player.gy = gridY;
+
             player.stucked = false;                  
         }else{
             if(!player.stucked){
@@ -338,15 +354,16 @@ function moveAndDrawPlayer(ctx){
             }
         }     
 
-        if(checkEnemies(gridX, gridY)){
+        if(checkEnemies(player.gx, player.gy)){            
             player.state = HIT;
             SOUNDS.die.play();               
             player.lifes -= player.lifes > 0 ? 1 : 0;            
             playing = false;            
         }
          
-        if(checkPill(gridX, gridY)){                        
+        if(checkPill(player.gx, player.gy)){                        
             SOUNDS.collect.currentTime = 0;
+            SOUNDS.collect.volume = 0.25;
             SOUNDS.collect.play();
             //player.speed += player.speed >= 10 ? 0 : 1;
         }

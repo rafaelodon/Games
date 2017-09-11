@@ -1,11 +1,27 @@
-<canvas id="canvas" style="border: 1px solid black"></canvas>
-<div>
-    Cycle: <span id="cycle"></span>
-    <button id="pause">Play/Pause</button>
-    <button id="next">&gt;&gt; Next</button>
-    </br>
-    By Rafael Odon (odon.rafael@gmail.com)
-</div>
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Pac-Again - By Rafael Odon</title>
+        <meta charset="UTF-8" />
+        <style>
+            body{
+                margin:0px;
+                padding: 0px;
+                overflow: hidden;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="canvas" style="border: 1px solid black"></canvas>
+        <div style="display: hidden">
+            Cycle: <span id="cycle"></span>
+            <button id="pause">Play/Pause</button>
+            <button id="next">&gt;&gt; Next</button>            
+            </br>            
+        </div>
+        By Rafael Odon (odon.rafael@gmail.com)
+    </body>
+</html>    
 <script>
 // constants
 var STEP=20;
@@ -41,7 +57,9 @@ var SOUNDS = {
     jump: new Audio("jump.wav"),
     collect: new Audio("collect.wav"),
     die: new Audio("die.wav"),
-    over: new Audio("over.wav"),
+    over: new Audio("over.wav"),    
+    bg1: new Audio("bg1.wav"),
+    bg2: new Audio("bg2.wav"),
 }
 
 var OBSTACLES = [    
@@ -92,12 +110,35 @@ var gameInterval = undefined;
 var lastKeyDirection = 0;
 var playing = true;
 var scene = SCENE_PRESS_SPACE;
+var pillsCollected = 0;
 
 window.onload = function(){
 
-    var canvas = document.getElementById("canvas");
-    canvas.height = HEIGHT * STEP;
+    var replay = function() {        
+        this.currentTime = 0.09;        
+        this.play();
+    };
+
+    SOUNDS.bg1.addEventListener('ended', replay, false);
+    SOUNDS.bg2.addEventListener('ended', replay, false);
+    SOUNDS.bg1.play();
+
+    var canvas = document.getElementById("canvas");        
+
+    var STEP_WIDTH = Math.floor((window.innerWidth / WIDTH) - ((window.innerWidth / WIDTH) % 2));
+    var STEP_HEIGHT = Math.floor((window.innerHeight / HEIGHT) - ((window.innerHeight / HEIGHT) % 2));
+
+    if(STEP_HEIGHT > STEP_WIDTH){
+        STEP = STEP_WIDTH;                
+    }else{
+        STEP = STEP_HEIGHT;
+    }    
+
+    HALF_STEP = STEP / 2;
+
     canvas.width = WIDTH * STEP;
+    canvas.height = HEIGHT * STEP;    
+
     var ctx = canvas.getContext("2d");    
 
     document.getElementById("pause").onclick = function(){
@@ -122,8 +163,8 @@ window.onload = function(){
         drawEnemy(enemy, ctx);
     });
 
-    player.x = canvas.width/2;
-    player.y = canvas.height/2 + HALF_STEP;
+    player.x = WIDTH / 2 * STEP + STEP;
+    player.y = HEIGHT / 2 * STEP;
     drawPlayer(player, ctx);
 
     gameInterval = setInterval(game, 1000/FPS, ctx);     
@@ -132,34 +173,52 @@ window.onload = function(){
 function game(ctx){  
 
     if(scene == SCENE_PRESS_SPACE){
-        clearCanvas(ctx);         
-        displayDarkOverlay(ctx);   
-        displayText(ctx, "PRESS SPACE TO CONTINUE");        
-        displayLifeCount(ctx);
 
-        var x = canvas.width / 2;
-        var y = canvas.height / 3 * 2;
-        
-        ctx.fillStyle = player.color;
-        ctx.beginPath();    
-        ctx.arc(x, y, STEP * 2, 0, Math.PI - 0.5);       
-        ctx.fill();
-        ctx.beginPath(); 
-        ctx.arc(x, y, STEP * 2, 0, Math.PI + 0.5, true);
-        ctx.fill();
+        if(SOUNDS.bg1.paused){
+            SOUNDS.bg2.pause();
+            SOUNDS.bg1.play();
+        }
+
+        clearCanvas(ctx);         
+        displayDarkOverlay(ctx);               
+        displayText(ctx, "PRESS ANY KEY...", canvas.width / 2, canvas.height / 2, STEP * 2);        
+        displayLifeCount(ctx);
+        drawPacman(ctx, canvas.width / 2, canvas.height / 3 * 2, STEP * 2);
 
     }else if(scene == SCENE_GAME){
+
+        if(SOUNDS.bg2.paused){
+            SOUNDS.bg1.pause();
+            SOUNDS.bg2.play();
+        }
+
         clearCanvas(ctx);    
         moveAndDrawEnemies(ctx);         
         moveAndDrawPlayer(ctx);        
+        displayText(ctx, "LIFES: "+player.lifes+"    PILLS: "+pillsCollected+" / "+PILLS_COUNT, canvas.width / 2, STEP, STEP);
+
     }else if(scene == SCENE_GAME_OVER){
+        
+        SOUNDS.bg1.pause();
+        SOUNDS.bg2.pause();
+        
         clearCanvas(ctx);   
         displayDarkOverlay(ctx);
         displayLifeCount(ctx); 
-        displayText(ctx, "GAME OVER! PRESS F5");
+        displayText(ctx, "GAME OVER!", canvas.width / 2, canvas.height / 2, STEP * 3);
     }    
 
     doCycle();
+}
+
+function drawPacman(ctx, x, y, scale){
+    ctx.fillStyle = player.color;
+        ctx.beginPath();    
+        ctx.arc(x, y, scale, 0, Math.PI - 0.5);       
+        ctx.fill();
+        ctx.beginPath(); 
+        ctx.arc(x, y, scale, 0, Math.PI + 0.5, true);
+        ctx.fill();
 }
 
 function togglePausePlay(ctx){  
@@ -273,7 +332,7 @@ function checkPlayer(x,y){
 function checkPill(x,y){
     for(var i=0; i<PILLS_COUNT; i++){
         if(pills[i] && pills[i].x == x && pills[i].y == y){
-            pills[i] = undefined;
+            pills[i] = undefined;            
             return true;
         }
     }
@@ -299,14 +358,16 @@ function displayDarkOverlay(ctx){
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
-function displayText(ctx, text){            
-    ctx.font = "30px sans-serif";  
-    var x = (canvas.width - ctx.measureText(text).width) / 2;
-    var y = (canvas.height) / 2;        
+function displayText(ctx, text, x, y, size){                
+    ctx.font = size+"px sans-serif";          
+
+    var realX = x - (ctx.measureText(text).width / 2);
+    var realY = y + (size / 2);
+
     ctx.fillStyle = "#333";
-    ctx.fillText(text.toUpperCase(),x-2,y+2);    
+    ctx.fillText(text.toUpperCase(),realX-2,realY+2);    
     ctx.fillStyle = "#FFF";
-    ctx.fillText(text.toUpperCase(),x,y);
+    ctx.fillText(text.toUpperCase(),realX,realY);
 }
 
 function displayLifeCount(ctx, x, y, scale){
@@ -355,7 +416,8 @@ function moveAndDrawPlayer(ctx){
         }     
 
         if(checkEnemies(player.gx, player.gy)){            
-            player.state = HIT;
+            SOUNDS.bg2.pause();
+            player.state = HIT;            
             SOUNDS.die.play();               
             player.lifes -= player.lifes > 0 ? 1 : 0;            
             playing = false;            
@@ -363,8 +425,9 @@ function moveAndDrawPlayer(ctx){
          
         if(checkPill(player.gx, player.gy)){                        
             SOUNDS.collect.currentTime = 0;
-            SOUNDS.collect.volume = 0.25;
+            SOUNDS.collect.volume = 0.1;
             SOUNDS.collect.play();
+            pillsCollected++;
             //player.speed += player.speed >= 10 ? 0 : 1;
         }
     }
@@ -382,7 +445,7 @@ function moveAndDrawPlayer(ctx){
         }
     }
 
-    if(player.state == HIT){
+    if(player.state == HIT){        
         player.aberturaBoca += 0.1; 
         if(player.aberturaBoca > 3){
             player.state = DEAD;

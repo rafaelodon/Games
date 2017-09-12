@@ -508,7 +508,7 @@ function nextDirection(enemy){
 }
 
 function previousDirection(enemy){
-    enemy.direction = (enemy.direction + 1) % DIRECTIONS.length;    
+    enemy.direction = (enemy.direction - 1 + DIRECTIONS.length) % DIRECTIONS.length;            
 }
 
 function drawEnemy(enemy, ctx){    

@@ -24,12 +24,12 @@
 </html>    
 <script>
 // constants
-var STEP=20;
+var STEP=16;
 var FPS=30;
 var HALF_STEP=STEP/2;
 var WIDTH=25;
 var HEIGHT=26;
-var PILLS_COUNT = 100;
+var PILLS_COUNT = 2;
 
 var RIGHT = 0;
 var DOWN = 1;
@@ -39,6 +39,7 @@ var UP = 3;
 var SCENE_PRESS_SPACE = 1;
 var SCENE_GAME = 2;
 var SCENE_GAME_OVER = 3;
+var SCENE_WIN  = 4;
 
 var MOVING = 1;
 var HIT = 2;
@@ -58,6 +59,7 @@ var SOUNDS = {
     collect: new Audio("collect.wav"),
     die: new Audio("die.wav"),
     over: new Audio("over.wav"),    
+    win: new Audio("win.wav"),
     bg1: new Audio("bg1.wav"),
     bg2: new Audio("bg2.wav"),
 }
@@ -94,15 +96,15 @@ var OBSTACLES = [
 //global attributes
 
 var enemies = [
-    { id: 1, gx: 1, gy: 2, speed: 2, direction: 0, color: "#F00" }, //red    
-    { id: 2, gx: 23, gy: 2, speed: 2, direction: 1, color: "#0F0" }, //green   
-    { id: 3, gx: 23, gy: 23, speed: 2, direction: 2, color: "#00F" }, //blue
-    { id: 4, gx: 1, gy: 23, speed: 2, direction: 3, color: "#F0F" }, //pink    
-    { id: 5, gx: 1, gy: 12, speed: 2, direction: 0, color: "#FF0" }, //yellow
-    { id: 6, gx: 23, gy: 12, speed: 2, direction: 1, color: "#0FF" }, //ciano    
+    { id: 1, gx: 1, gy: 2, speed: 1, direction: 0, color: "#F00" }, //red    
+    { id: 2, gx: 23, gy: 2, speed: 1, direction: 1, color: "#0F0" }, //green   
+    { id: 3, gx: 23, gy: 23, speed: 1, direction: 2, color: "#00F" }, //blue
+    { id: 4, gx: 1, gy: 23, speed: 1, direction: 3, color: "#F0F" }, //pink    
+    { id: 5, gx: 1, gy: 12, speed: 1, direction: 0, color: "#FF0" }, //yellow
+    { id: 6, gx: 23, gy: 12, speed: 1, direction: 1, color: "#0FF" }, //ciano    
 ];
 
-var player = { x: 0, y: 0, speed: 4, direction: 0, color: "#FF0", lifes: 3, stucked: false, state: MOVING };
+var player = { x: 0, y: 0, speed: 2, direction: 0, color: "#FF0", lifes: 3, stucked: false, state: MOVING };
 
 var cycle=0;
 var pills = [];
@@ -125,14 +127,18 @@ window.onload = function(){
 
     var canvas = document.getElementById("canvas");        
 
-    var STEP_WIDTH = Math.floor((window.innerWidth / WIDTH) - ((window.innerWidth / WIDTH) % 2));
-    var STEP_HEIGHT = Math.floor((window.innerHeight / HEIGHT) - ((window.innerHeight / HEIGHT) % 2));
+    var STEP_WIDTH = Math.floor((window.innerWidth / WIDTH) - ((window.innerWidth / WIDTH) % 4));
+    var STEP_HEIGHT = Math.floor((window.innerHeight / HEIGHT) - ((window.innerHeight / HEIGHT) % 4));
 
     if(STEP_HEIGHT > STEP_WIDTH){
         STEP = STEP_WIDTH;                
     }else{
         STEP = STEP_HEIGHT;
-    }    
+    }  
+
+    if(STEP < 16){
+        STEP = 16;
+    }  
 
     HALF_STEP = STEP / 2;
 
@@ -152,7 +158,11 @@ window.onload = function(){
     document.onkeydown = keyDown;
 
     for(var i=0; i<PILLS_COUNT; i++){
-        pills.push(generateCoordinateOnEmptySpace());        
+        var pill = generateCoordinateOnEmptySpace();
+        if(pills[pill.x] === undefined){
+            pills[pill.x] = new Array(WIDTH);
+        }
+        pills[pill.x][pill.y] = 1;        
     }
 
     clearCanvas(ctx);
@@ -194,7 +204,8 @@ function game(ctx){
 
         clearCanvas(ctx);    
         moveAndDrawEnemies(ctx);         
-        moveAndDrawPlayer(ctx);        
+        movePlayer(ctx);        
+        drawPlayer(player, ctx);
         displayText(ctx, "LIFES: "+player.lifes+"    PILLS: "+pillsCollected+" / "+PILLS_COUNT, canvas.width / 2, STEP, STEP);
 
     }else if(scene == SCENE_GAME_OVER){
@@ -206,7 +217,18 @@ function game(ctx){
         displayDarkOverlay(ctx);
         displayLifeCount(ctx); 
         displayText(ctx, "GAME OVER!", canvas.width / 2, canvas.height / 2, STEP * 3);
-    }    
+    }else if(scene == SCENE_WIN){
+
+        if(!SOUNDS.bg2.paused){
+            SOUNDS.bg2.pause();            
+            SOUNDS.win.play();
+        }                
+
+        clearCanvas(ctx);
+        displayDarkOverlay(ctx);
+        displayText(ctx, "Completed!", canvas.width / 2, canvas.height / 3, STEP * 2);        
+        drawPacman(ctx, canvas.width / 2, canvas.height / 3 * 2, STEP * 2);
+    }
 
     doCycle();
 }
@@ -276,25 +298,27 @@ function drawBackground(ctx){
     ctx.fillRect(0,0,WIDTH*STEP,HEIGHT*STEP);
 }
 
-function drawPills(ctx){
-    pills.forEach(function(p){        
-        drawPill(p,ctx);
-    });
+function drawPills(ctx){    
+    for(var x=0; x<WIDTH; x++){
+        for(var y=0; y<HEIGHT; y++){
+            if(checkPill(x, y) ==  1){
+                drawPill(x, y, ctx);
+            }
+        }
+    }
 }
 
-function drawPill(p, ctx){
-    if(p){        
-        ctx.fillStyle = "black"
-        var value = (Math.sin(cycle * Math.PI * 2 / FPS) / 2 + 0.5) * 0xFF | 0;        
-        var grayscale = (value << 16) | (value << 8) | value;
-        var color = '#' + grayscale.toString(16);
+function drawPill(x, y, ctx){       
+    ctx.fillStyle = "black"
+    var value = (Math.sin(cycle * Math.PI * 2 / FPS) / 2 + 0.5) * 0xFF | 0;        
+    var grayscale = (value << 16) | (value << 8) | value;
+    var color = '#' + grayscale.toString(16);
 
-        ctx.fillStyle = color;    
-        ctx.beginPath();
-        ctx.arc(p.x*STEP+HALF_STEP, p.y*STEP+HALF_STEP, HALF_STEP*0.3, 0, 2*Math.PI);
-        ctx.arc(p.x*STEP+HALF_STEP, p.y*STEP+HALF_STEP, HALF_STEP*0.3, 0, 2*Math.PI);
-        ctx.fill();
-    }
+    ctx.fillStyle = color;    
+    ctx.beginPath();
+    ctx.arc(x*STEP+HALF_STEP, y*STEP+HALF_STEP, HALF_STEP*0.3, 0, 2*Math.PI);
+    ctx.arc(x*STEP+HALF_STEP, y*STEP+HALF_STEP, HALF_STEP*0.3, 0, 2*Math.PI);
+    ctx.fill();
 }
 
 function drawGrid(ctx){
@@ -330,13 +354,7 @@ function checkPlayer(x,y){
 }
 
 function checkPill(x,y){
-    for(var i=0; i<PILLS_COUNT; i++){
-        if(pills[i] && pills[i].x == x && pills[i].y == y){
-            pills[i] = undefined;            
-            return true;
-        }
-    }
-    return false;
+    return pills[x] && pills[x][y] == 1;    
 }
 
 function checkObstacle(x, y){
@@ -387,54 +405,62 @@ function doCycle(){
     document.getElementById("cycle").innerText = ""+ cycle;  
 }
 
-function moveAndDrawPlayer(ctx){
+function movePlayer(ctx){
 
-    if(player.state == MOVING){
-        if((player.x + HALF_STEP) % STEP == 0 && (player.y + HALF_STEP) % STEP == 0){            
-            player.direction = lastKeyDirection;
-        }
-
-        var destX = player.x + DIRECTIONS[player.direction].dx * player.speed;
-        var destY = player.y + DIRECTIONS[player.direction].dy * player.speed;
-
-        var gridX = parseInt((player.x + DIRECTIONS[player.direction].dx * (HALF_STEP + 0.5)) / STEP); 
-        var gridY = parseInt((player.y + DIRECTIONS[player.direction].dy * (HALF_STEP + 0.5)) / STEP);                        
-
-        if(!checkObstacle(gridX, gridY)){                           
-            player.x = destX;
-            player.y = destY;
-
-            player.gx = gridX;
-            player.gy = gridY;
-
-            player.stucked = false;                  
-        }else{
-            if(!player.stucked){
-                SOUNDS.hit.play();
-                player.stucked = true;
+    if(playing){
+        if(player.state == MOVING){
+            if((player.x + HALF_STEP) % STEP == 0 && (player.y + HALF_STEP) % STEP == 0){            
+                player.direction = lastKeyDirection;
             }
-        }     
 
-        if(checkEnemies(player.gx, player.gy)){            
-            SOUNDS.bg2.pause();
-            player.state = HIT;            
-            SOUNDS.die.play();               
-            player.lifes -= player.lifes > 0 ? 1 : 0;            
-            playing = false;            
+            var destX = player.x + DIRECTIONS[player.direction].dx * player.speed * STEP / 8;
+            var destY = player.y + DIRECTIONS[player.direction].dy * player.speed * STEP / 8;
+
+            var gridX = parseInt((player.x + DIRECTIONS[player.direction].dx * (HALF_STEP + 0.5)) / STEP); 
+            var gridY = parseInt((player.y + DIRECTIONS[player.direction].dy * (HALF_STEP + 0.5)) / STEP);                        
+
+            if(!checkObstacle(gridX, gridY)){                           
+                player.x = destX;
+                player.y = destY;
+
+                player.gx = gridX;
+                player.gy = gridY;
+
+                player.stucked = false;                  
+            }else{
+                if(!player.stucked){
+                    SOUNDS.hit.play();
+                    player.stucked = true;
+                }
+            }     
+
+            if(checkEnemies(player.gx, player.gy)){            
+                SOUNDS.bg2.pause();
+                player.state = HIT;            
+                SOUNDS.die.play();               
+                player.lifes -= player.lifes > 0 ? 1 : 0;            
+                playing = false;            
+            }
+            
+            if(checkPill(player.gx, player.gy)){                        
+                SOUNDS.collect.currentTime = 0;
+                SOUNDS.collect.volume = 0.1;
+                SOUNDS.collect.play();
+                pillsCollected++;
+                pills[player.gx][player.gy] = undefined;
+
+                if(pillsCollected == PILLS_COUNT){
+                    playing = false;
+                    scene = SCENE_WIN;
+                }
+                //player.speed += player.speed >= 10 ? 0 : 1;
+            }
         }
-         
-        if(checkPill(player.gx, player.gy)){                        
-            SOUNDS.collect.currentTime = 0;
-            SOUNDS.collect.volume = 0.1;
-            SOUNDS.collect.play();
-            pillsCollected++;
-            //player.speed += player.speed >= 10 ? 0 : 1;
-        }
+
+        //bloco no grid para debug
+        //ctx.fillStyle = "red";
+        //ctx.fillRect(gridX * STEP, gridY * STEP, STEP, STEP);                
     }
-
-    //bloco no grid para debug
-    //ctx.fillStyle = "red";
-    //ctx.fillRect(gridX * STEP, gridY * STEP, STEP, STEP);
 
     if(player.state == DEAD){
         if(player.lifes > 0){
@@ -451,8 +477,6 @@ function moveAndDrawPlayer(ctx){
             player.state = DEAD;
         }
     }
-
-    drawPlayer(player, ctx);   
 }
 
 function moveAndDrawEnemies(ctx){
@@ -482,8 +506,8 @@ function randomWalk(enemy){
         }
     }
 
-    var destX = enemy.x + DIRECTIONS[enemy.direction].dx * enemy.speed;
-    var destY = enemy.y + DIRECTIONS[enemy.direction].dy * enemy.speed;
+    var destX = enemy.x + DIRECTIONS[enemy.direction].dx * enemy.speed * STEP / 8;
+    var destY = enemy.y + DIRECTIONS[enemy.direction].dy * enemy.speed * STEP / 8;
 
     var gridX = parseInt((enemy.x + DIRECTIONS[enemy.direction].dx * (HALF_STEP + 0.5)) / STEP); 
     var gridY = parseInt((enemy.y + DIRECTIONS[enemy.direction].dy * (HALF_STEP + 0.5)) / STEP);

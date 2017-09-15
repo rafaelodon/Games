@@ -29,21 +29,29 @@ var FPS=30;
 var HALF_STEP=STEP/2;
 var WIDTH=25;
 var HEIGHT=26;
-var PILLS_COUNT = 2;
+var PILLS_COUNT = 30;
 
+//directions
 var RIGHT = 0;
 var DOWN = 1;
 var LEFT = 2;
 var UP = 3;
 
-var SCENE_PRESS_SPACE = 1;
+//scenes
+var SCENE_PRESS_ANY_KEY = 1;
 var SCENE_GAME = 2;
 var SCENE_GAME_OVER = 3;
 var SCENE_WIN  = 4;
 
+//player states
 var MOVING = 1;
 var HIT = 2;
 var DEAD = 3;
+
+//ghosts states
+var CHASE = 1;
+var EXPLORE = 2;
+var STUCKED = 3;
 
 var DIRECTIONS = [
     { dx: 1, dy: 0}, // right    
@@ -96,12 +104,12 @@ var OBSTACLES = [
 //global attributes
 
 var enemies = [
-    { id: 1, gx: 1, gy: 2, speed: 1, direction: 0, color: "#F00" }, //red    
-    { id: 2, gx: 23, gy: 2, speed: 1, direction: 1, color: "#0F0" }, //green   
-    { id: 3, gx: 23, gy: 23, speed: 1, direction: 2, color: "#00F" }, //blue
-    { id: 4, gx: 1, gy: 23, speed: 1, direction: 3, color: "#F0F" }, //pink    
-    { id: 5, gx: 1, gy: 12, speed: 1, direction: 0, color: "#FF0" }, //yellow
-    { id: 6, gx: 23, gy: 12, speed: 1, direction: 1, color: "#0FF" }, //ciano    
+    { id: 1, gx: 1, gy: 2, speed: 1, range: 5, direction: 0, color: "#F00" }, //red        
+    { id: 2, gx: 23, gy: 2, speed: 1, range: 5, direction: 1, color: "#0F0" }, //green   
+    { id: 3, gx: 23, gy: 23, speed: 1, range: 5, direction: 2, color: "#00F" }, //blue
+    { id: 4, gx: 1, gy: 23, speed: 1, range: 5, direction: 3, color: "#F0F" }, //pink    
+    { id: 5, gx: 1, gy: 12, speed: 1, range: 5, direction: 0, color: "#FF0" }, //yellow
+    { id: 6, gx: 23, gy: 12, speed: 1, range: 5, direction: 1, color: "#0FF" }, //ciano        
 ];
 
 var player = { x: 0, y: 0, speed: 2, direction: 0, color: "#FF0", lifes: 3, stucked: false, state: MOVING };
@@ -111,7 +119,7 @@ var pills = [];
 var gameInterval = undefined;
 var lastKeyDirection = 0;
 var playing = true;
-var scene = SCENE_PRESS_SPACE;
+var scene = SCENE_PRESS_ANY_KEY;
 var pillsCollected = 0;
 
 window.onload = function(){
@@ -182,7 +190,7 @@ window.onload = function(){
 
 function game(ctx){  
 
-    if(scene == SCENE_PRESS_SPACE){
+    if(scene == SCENE_PRESS_ANY_KEY){
 
         if(SOUNDS.bg1.paused){
             SOUNDS.bg2.pause();
@@ -225,8 +233,8 @@ function game(ctx){
         }                
 
         clearCanvas(ctx);
-        displayDarkOverlay(ctx);
-        displayText(ctx, "Completed!", canvas.width / 2, canvas.height / 3, STEP * 2);        
+        displayDarkOverlay(ctx);        
+        displayText(ctx, "LEVEL COMPLETED!", canvas.width / 2, canvas.height / 3, STEP * 2);        
         drawPacman(ctx, canvas.width / 2, canvas.height / 3 * 2, STEP * 2);
     }
 
@@ -257,23 +265,26 @@ function keyDown(e) {
 
     e = e || window.event;
 
-    if (e.keyCode == '38') { //up
-        lastKeyDirection = UP;
-    } else if (e.keyCode == '40') { //down
-        lastKeyDirection = DOWN;
-    } else if (e.keyCode == '37') { //left
-        lastKeyDirection = LEFT;
-    } else if (e.keyCode == '39') { //right
-        lastKeyDirection = RIGHT;
-    } else if (e.keyCode = '32') {
-        if(scene == SCENE_PRESS_SPACE){
-            scene = SCENE_GAME;
-            playing = true;
-            player.x = canvas.width/2;
-            player.y = canvas.height/2 + HALF_STEP;
-            player.state = MOVING;
-        }
+    if(scene == SCENE_GAME){    
+        if (e.keyCode == '38') { //up
+            lastKeyDirection = UP;
+        } else if (e.keyCode == '40') { //down
+            lastKeyDirection = DOWN;
+        } else if (e.keyCode == '37') { //left
+            lastKeyDirection = LEFT;
+        } else if (e.keyCode == '39') { //right
+            lastKeyDirection = RIGHT;
+        } 
     }
+
+    if(scene == SCENE_PRESS_ANY_KEY){
+        scene = SCENE_GAME;
+        playing = true;
+        player.x = canvas.width/2;
+        player.y = canvas.height/2 + HALF_STEP;
+        player.state = MOVING;
+    }
+    
 }
 
 
@@ -350,7 +361,7 @@ function drawOBSTACLES(ctx){
 }
 
 function checkPlayer(x,y){    
-    return player.x == x && player.y == y;
+    return player.gx == x && player.gy == y;
 }
 
 function checkPill(x,y){
@@ -377,15 +388,14 @@ function displayDarkOverlay(ctx){
 }
 
 function displayText(ctx, text, x, y, size){                
-    ctx.font = size+"px sans-serif";          
-
+    ctx.font = size+"px sans-serif";                  
     var realX = x - (ctx.measureText(text).width / 2);
-    var realY = y + (size / 2);
+    var realY = y + (size / 2);    
 
     ctx.fillStyle = "#333";
-    ctx.fillText(text.toUpperCase(),realX-2,realY+2);    
+    ctx.fillText(text,realX-2,realY+2);    
     ctx.fillStyle = "#FFF";
-    ctx.fillText(text.toUpperCase(),realX,realY);
+    ctx.fillText(text,realX,realY);
 }
 
 function displayLifeCount(ctx, x, y, scale){
@@ -464,7 +474,7 @@ function movePlayer(ctx){
 
     if(player.state == DEAD){
         if(player.lifes > 0){
-            scene = SCENE_PRESS_SPACE;        
+            scene = SCENE_PRESS_ANY_KEY;        
         }else{
             scene = SCENE_GAME_OVER;        
             SOUNDS.over.play();
@@ -484,47 +494,85 @@ function moveAndDrawEnemies(ctx){
         if(playing){
             randomWalk(enemy);        
         }
-
-        /*
-        ctx.fillStyle = "lime";
-        ctx.fillRect(enemy.gx * STEP, enemy.gy * STEP, STEP, STEP);
-        */
-
         drawEnemy(enemy, ctx);
     });
 }
 
 function randomWalk(enemy){
-    
+
     var r = Math.random();
-    
-    if((enemy.x - HALF_STEP) % STEP == 0 && (enemy.y - HALF_STEP) % STEP == 0){            
-        if(r < 0.05){
-            nextDirection(enemy);        
-        }else if(r < 0.1){
-            previousDirection(enemy);
+
+    if((enemy.x - HALF_STEP) % STEP == 0 && (enemy.y - HALF_STEP) % STEP == 0){                                    
+
+        var dx = player.gx - enemy.gx;
+        var dy = player.gy - enemy.gy;
+        var distance = Math.sqrt(dx*dx + dy*dy);        
+        if(distance <= enemy.range){                                                                                
+            enemy.state = CHASE;
+            console.log(dx+", "+dy+", "+distance);
+                        
+            if(dx*dx > dy*dy){                
+                if(dx > 0){
+                    enemy.direction = RIGHT;                    
+                    console.log("enemy "+enemy.id+" chasing RIGHT");
+                }else{
+                    enemy.direction = LEFT;
+                    console.log("enemy "+enemy.id+" chasing LEFT");
+                }
+            }else{
+                if(dy > 0){
+                    enemy.direction = DOWN;
+                    console.log("enemy "+enemy.id+" chasing DOWN");
+                }else{
+                    enemy.direction = UP;
+                    console.log("enemy "+enemy.id+" chasing UP");                    
+                }                
+            }          
+        }else{            
+            enemy.state = EXPLORE;
+        }                
+
+        if(enemy.state && enemy.state == EXPLORE){                        
+            if(r < 0.05){
+                nextDirection(enemy);        
+            }else if(r < 0.1){
+                previousDirection(enemy);
+            }        
         }
     }
 
-    var destX = enemy.x + DIRECTIONS[enemy.direction].dx * enemy.speed * STEP / 8;
-    var destY = enemy.y + DIRECTIONS[enemy.direction].dy * enemy.speed * STEP / 8;
+    var tries = 0;
+    while(true){
+        var destX = enemy.x + DIRECTIONS[enemy.direction].dx * enemy.speed * STEP / 8;
+        var destY = enemy.y + DIRECTIONS[enemy.direction].dy * enemy.speed * STEP / 8;
 
-    var gridX = parseInt((enemy.x + DIRECTIONS[enemy.direction].dx * (HALF_STEP + 0.5)) / STEP); 
-    var gridY = parseInt((enemy.y + DIRECTIONS[enemy.direction].dy * (HALF_STEP + 0.5)) / STEP);
+        var gridX = parseInt((enemy.x + DIRECTIONS[enemy.direction].dx * (HALF_STEP + 0.5)) / STEP); 
+        var gridY = parseInt((enemy.y + DIRECTIONS[enemy.direction].dy * (HALF_STEP + 0.5)) / STEP);
 
-    if(!checkObstacle(gridX, gridY)){                           
-        enemy.x = destX;
-        enemy.y = destY; 
+        if(!checkObstacle(gridX, gridY)){                           
+            enemy.x = destX;
+            enemy.y = destY; 
 
-        enemy.gx = gridX;
-        enemy.gy = gridY;       
-    }else{
-        if(r < 0.5){
-            nextDirection(enemy);
-        }else{
-            previousDirection(enemy);
+            enemy.gx = gridX;
+            enemy.gy = gridY;       
+
+            break;
+        }else{            
+            if(r < 0.5){
+                nextDirection(enemy);
+            }else{
+                previousDirection(enemy);
+            }                    
         }
-    }                                                   
+        tries++;
+        if(tries > 4){
+            break;
+        }
+    }
+}
+
+function oppositeDirection(enemy){
+    enemy.direction = (enemy.direction + DIRECTIONS.length/2) % DIRECTIONS.length;
 }
 
 function nextDirection(enemy){
@@ -535,12 +583,7 @@ function previousDirection(enemy){
     enemy.direction = (enemy.direction - 1 + DIRECTIONS.length) % DIRECTIONS.length;            
 }
 
-function drawEnemy(enemy, ctx){    
-
-    ctx.fillStyle = "white";    
-    ctx.beginPath();
-    ctx.arc(enemy.x, enemy.y, HALF_STEP, 0, Math.PI * 2);
-    ctx.fill();
+function drawEnemy(enemy, ctx){        
 
     ctx.fillStyle = enemy.color;    
     ctx.beginPath();
@@ -549,17 +592,34 @@ function drawEnemy(enemy, ctx){
    
     ctx.fillRect(enemy.x - HALF_STEP , enemy.y, STEP, HALF_STEP);    
   
-    ctx.fillStyle = "white";    
-    ctx.beginPath();
-    ctx.arc(enemy.x+0.70*STEP - HALF_STEP, enemy.y, STEP/4, 0, 2*Math.PI);
-    ctx.arc(enemy.x+0.30*STEP - HALF_STEP, enemy.y, STEP/4, 0, 2*Math.PI);
-    ctx.fill();
+    
+    if(enemy.state == EXPLORE){
+        ctx.fillStyle = "white";    
+        ctx.beginPath();
+        ctx.arc(enemy.x+0.70*STEP - HALF_STEP, enemy.y, STEP/4, 0, 2*Math.PI);        
+        ctx.arc(enemy.x+0.30*STEP - HALF_STEP, enemy.y, STEP/4, 0, 2*Math.PI);
+        ctx.fill();
+        ctx.fillStyle = "black";    
+        ctx.beginPath();
+        ctx.arc(enemy.x+0.70*STEP + HALF_STEP*(1.0 + DIRECTIONS[enemy.direction].dx/5) - STEP, enemy.y+1*(1.0 + DIRECTIONS[enemy.direction].dy/5), STEP/8, 0, 2*Math.PI);
+        ctx.arc(enemy.x+0.30*STEP + HALF_STEP*(1.0 + DIRECTIONS[enemy.direction].dx/5) - STEP, enemy.y+1*(1.0 + DIRECTIONS[enemy.direction].dy/5), STEP/8, 0, 2*Math.PI);
+        ctx.fill();        
+    }else if(enemy.state == CHASE){
+        ctx.fillStyle = "white";    
+        ctx.beginPath();
+        ctx.arc(enemy.x+0.70*STEP - HALF_STEP, enemy.y, STEP/4, Math.PI, 1.75*Math.PI, true);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(enemy.x+0.30*STEP - HALF_STEP, enemy.y, STEP/4, 1.25*Math.PI, 0, true);
+        ctx.fill();
+        ctx.fillStyle = "black";    
+        ctx.beginPath();
+        ctx.arc(enemy.x+0.70*STEP + HALF_STEP*(1.0 + DIRECTIONS[enemy.direction].dx/5) - STEP, enemy.y+1*(1.0 + DIRECTIONS[enemy.direction].dy/5), STEP/12, 0, 2*Math.PI);
+        ctx.arc(enemy.x+0.30*STEP + HALF_STEP*(1.0 + DIRECTIONS[enemy.direction].dx/5) - STEP, enemy.y+1*(1.0 + DIRECTIONS[enemy.direction].dy/5), STEP/12, 0, 2*Math.PI);
+        ctx.fill();    
+    }    
 
-    ctx.fillStyle = "black";    
-    ctx.beginPath();
-    ctx.arc(enemy.x+0.70*STEP + HALF_STEP*(1.0 + DIRECTIONS[enemy.direction].dx/5) - STEP, enemy.y+1*(1.0 + DIRECTIONS[enemy.direction].dy/5), STEP/10, 0, 2*Math.PI);
-    ctx.arc(enemy.x+0.30*STEP + HALF_STEP*(1.0 + DIRECTIONS[enemy.direction].dx/5) - STEP, enemy.y+1*(1.0 + DIRECTIONS[enemy.direction].dy/5), STEP/10, 0, 2*Math.PI);
-    ctx.fill();        
+    
 }
 
 function drawPlayer(player, ctx){

@@ -10,4 +10,4 @@ CREDITS:
 
 * Background music: CH Loops by Clinthammer (https://freesound.org/people/Clinthammer/packs/11343/)
 
-* FX sound: Pack: 8-Bit Sound Effects Library by LittleRobotSoundFactory (https://freesound.org/people/LittleRobotSoundFactory/packs/16681/)
+* FX sound: 8-Bit Sound Effects Library by LittleRobotSoundFactory (https://freesound.org/people/LittleRobotSoundFactory/packs/16681/)
